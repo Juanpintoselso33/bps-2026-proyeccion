@@ -58,8 +58,11 @@ th{color:var(--mut);font-weight:600}
 <div class="wrap">
 <header>
   <h1>Elecciones BPS 2026 · Proyección en vivo</h1>
-  <p>Activos, Pasivos y Empresas. Datos del escrutinio primario de la Corte Electoral, actualizados cada 15 minutos.</p>
+  <p>Activos, Pasivos y Empresas. Escrutinio departamental y primario de la Corte Electoral, actualizados cada 15 minutos.</p>
 </header>
+<div id="dep"></div>
+<h2 style="margin:34px 0 4px;font-size:20px">Escrutinio primario (noche de la elección)</h2>
+<p style="color:var(--mut);margin:0 0 6px;font-size:14px">Proyección en vivo durante el conteo del 22 de noviembre.</p>
 <div class="top">
   <span class="pill" id="corte">Cargando…</span>
   <div class="prog"><div class="bar"><i id="progbar" style="width:0"></i></div></div>
@@ -136,8 +139,43 @@ function render(d,h){
         tooltip:{filter:i=>!i.dataset.label.endsWith(' ')&&!i.dataset.label.endsWith('(IC)'),callbacks:{label:c=>c.dataset.label+': '+f2(c.parsed.y)+'%'}}}}}));
   });
 }
+async function loadDep(){
+  const r=await fetch(DATA+'dep.json?t='+Date.now());if(!r.ok)return;
+  const d=await r.json();const c=document.getElementById('dep');
+  const sg=n=>(n>0?'+':'')+fmt(n);
+  c.innerHTML=`<div class="top"><span class="pill">Departamental · corte ${d.fecha_corte}</span>
+    <div class="prog"><div class="bar"><i style="width:${100*d.circuitos_escrutados/d.circuitos_total}%"></i></div></div>
+    <span class="pill">${fmt(d.circuitos_escrutados)} / ${fmt(d.circuitos_total)} circuitos</span></div>`+
+  d.ordenes.map(o=>{
+    const L=o.listas;const pend=o.deptos_pendientes;
+    const cerrado=!pend.length;
+    const verd=cerrado?`${o.lider} gana por ${fmt(o.dif_actual)} votos`:
+      `${o.lider} gana por ≈${fmt(o.dif_proy)} votos proyectados`;
+    return `<div class="card" style="border-top-color:var(--green)">
+    <div class="head"><div style="flex:1;min-width:260px">
+      <span class="kick" style="color:var(--green)">${o.orden} · ESCRUTINIO DEPARTAMENTAL</span>
+      <div class="verd">${verd}</div>
+      <div class="sub">${cerrado?'Observados incorporados en los 19 departamentos.':
+        `Hoy: ${o.lider} +${fmt(o.dif_actual)} sobre la ${o.segundo}. Faltan los observados de ${pend.join(', ')} (${fmt(o.obs_pendientes)} sobres en este orden). Proyección final: ${sg(o.dif_proy)} (IC 95%: ${sg(o.dif_lo)} a ${sg(o.dif_hi)}), ${f2(o.dif_pp)} pp.`}</div>
+    </div>
+    <div class="fia"><div class="l">Probabilidad de que gane la ${o.lider}</div>
+      <div class="n">${o.prob_lider.toFixed(1).replace('.',',')}% <small>/ 100%</small></div>
+      <div class="bar"><i style="width:${o.prob_lider}%"></i></div></div></div>
+    <hr>
+    <div class="lists">${L.map(l=>`<div class="li"><div><div class="nm" style="color:${COL[l.id]||'#e8edf5'}">${l.nombre} <span style="color:var(--mut);font-weight:400;font-size:14px">· ${l.candidato}</span></div>
+      <div class="ag">${l.agrupacion}</div><div class="ic">IC 95%: [${f2(l.ic_lo)}% – ${f2(l.ic_hi)}%]${l.factor_obs?` · inclinación de los observados ×${f2(l.factor_obs)}`:''}</div></div>
+      <div><div class="pc">${f2(l.proy_pct)}%</div><div class="br">Proy: ${fmt(l.proy)} · hoy ${fmt(l.actual)} votos</div></div></div>`).join('')}</div>
+    <div class="box" style="margin-top:20px"><h3>Observados por departamento (votos sumados a cada lista respecto del primario)</h3><div class="tbl"><table><thead><tr><th>Depto</th><th>Circ.</th><th>Observados</th><th>Estado</th>${L.map(l=>`<th style="color:${COL[l.id]}">L${l.id}</th>`).join('')}</tr></thead>
+      <tbody>${o.deptos.map(r=>`<tr><td>${r.depto}</td><td>${r.circ}</td><td>${fmt(r.observados)}</td><td style="color:${r.obs_incorporados?'var(--green)':'var(--amber)'}">${r.obs_incorporados?'sumados':'pendiente'}</td>${L.map(l=>`<td>${r.delta?sg(r.delta[l.id]):'—'}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
+    </div>`}).join('')+
+  `<div class="card" style="border-top-color:var(--violet)"><div class="kick" style="color:var(--violet)">CÓMO SE PROYECTA EL DEPARTAMENTAL</div><div class="meth">
+    <p><b>Los observados ya sumados enseñan cómo se comportan los que faltan.</b> En cada departamento cerrado se compara el departamental con el primario: cuántos votos a listas dejó cada sobre observado (rendimiento${d.ordenes[1]&&d.ordenes[1].rendimiento!=null?`, en Pasivos ${f2(d.ordenes[1].rendimiento)} por sobre`:''}) y hacia qué listas se inclinaron respecto de cómo votó ese departamento.</p>
+    <p><b>Departamentos pendientes:</b> se reponen los circuitos que faltan con su dato primario y se suman sus observados con ese rendimiento e inclinación, aplicados al reparto primario de cada departamento.</p>
+    <p><b>Intervalo 95%:</b> bootstrap sobre los departamentos cerrados; cada departamento pendiente toma el rendimiento de un departamento cerrado al azar.</p></div></div>`;
+}
 load().catch(e=>{document.getElementById('corte').textContent='Error cargando datos';console.error(e)});
-setInterval(()=>load().catch(console.error),60000);
+loadDep().catch(console.error);
+setInterval(()=>{load().catch(console.error);loadDep().catch(console.error)},60000);
 </script>
 </body>
 </html>
